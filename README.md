@@ -64,6 +64,15 @@ ssh localhost -p 2023 -i server_key.pem
 make shell
 ```
 
+## `🐳` Usage on Docker
+
+📌 Don't forget use `keygen` before run docker
+
+```shell
+docker compose build # docker-compose build
+docker compose up -d # docker-compose up -d
+```
+
 ## `📚` References
 
 - [gliderlabs/ssh](https://pkg.go.dev/github.com/gliderlabs/ssh?utm_source=godoc) _Learned a lot from this project_
