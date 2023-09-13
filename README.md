@@ -31,6 +31,10 @@ go run cmd/server/main.go
 go run cmd/client/main.go
 ```
 
+```bash
+ssh localhost -p 2022 -i server_key.pem "whoami"
+```
+
 - Interactive shell
 
 ```bash
