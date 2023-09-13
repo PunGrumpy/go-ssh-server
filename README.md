@@ -48,6 +48,14 @@ ssh localhost -p 2022 -i server_key.pem "whoami"
 ssh localhost -p 2023 -i server_key.pem
 ```
 
+## `📚` References
+
+- [gliderlabs/ssh](https://pkg.go.dev/github.com/gliderlabs/ssh?utm_source=godoc)
+- [golang/crypto](https://pkg.go.dev/golang.org/x/crypto?utm_source=godoc)
+- [golang/term](https://pkg.go.dev/golang.org/x/term?utm_source=godoc)
+- [golang/net](https://pkg.go.dev/golang.org/x/net?utm_source=godoc)
+- [golang/sys](https://pkg.go.dev/golang.org/x/sys?utm_source=godoc)
+
 ## `⚖️` License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
