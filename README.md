@@ -22,12 +22,20 @@ This project is a simple SSH server written in Go. It is intended to be used as 
 go run cmd/keygen/main.go
 ```
 
+```bash
+make keygen
+```
+
 ### `🏭` Server
 
 **[Server](cmd/server/main.go)**
 
 ```bash
 go run cmd/server/main.go
+```
+
+```bash
+make server
 ```
 
 ### `📦` Client
@@ -42,10 +50,18 @@ go run cmd/client/main.go
 ssh localhost -p 2022 -i server_key.pem "whoami"
 ```
 
+```bash
+make exec
+```
+
 - Interactive shell
 
 ```bash
 ssh localhost -p 2023 -i server_key.pem
+```
+
+```bash
+make shell
 ```
 
 ## `📚` References
