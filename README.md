@@ -25,8 +25,6 @@ go run cmd/server/main.go
 
 ### `📦` Client
 
-**[Client](cmd/client/main.go)**
-
 - **[Client](cmd/client/main.go)** Execute a command
 
 ```bash
