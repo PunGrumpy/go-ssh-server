@@ -50,7 +50,8 @@ ssh localhost -p 2023 -i server_key.pem
 
 ## `📚` References
 
-- [gliderlabs/ssh](https://pkg.go.dev/github.com/gliderlabs/ssh?utm_source=godoc)
+- [gliderlabs/ssh](https://pkg.go.dev/github.com/gliderlabs/ssh?utm_source=godoc) _Learned a lot from this project_
+- [golang/ssh](https://pkg.go.dev/golang.org/x/crypto/ssh?utm_source=godoc)
 - [golang/crypto](https://pkg.go.dev/golang.org/x/crypto?utm_source=godoc)
 - [golang/term](https://pkg.go.dev/golang.org/x/term?utm_source=godoc)
 - [golang/net](https://pkg.go.dev/golang.org/x/net?utm_source=godoc)
