@@ -1,0 +1,4 @@
+# Server Key
+*.pem
+*.pub
+*.key
