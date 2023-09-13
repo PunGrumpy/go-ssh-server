@@ -9,11 +9,17 @@ This project is a simple SSH server written in Go. It is intended to be used as 
 
 ## `🚀` Usage
 
+### `🔐` Key Generation
+
+```bash
+go run cmd/keygen/main.go
+```
+
 ### `🏭` Server
 
 **[Server](cmd/server/main.go)**
 
-```go
+```bash
 go run cmd/server/main.go
 ```
 
@@ -23,13 +29,13 @@ go run cmd/server/main.go
 
 - **[Client](cmd/client/main.go)** Execute a command
 
-```go
+```bash
 go run cmd/client/main.go
 ```
 
 - Interactive shell
 
-```go
+```bash
 ssh localhost -p 2023 -i server_key.pem
 ```
 
