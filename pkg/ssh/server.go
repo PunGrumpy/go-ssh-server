@@ -104,15 +104,15 @@ func HandleConnection(connection *ssh.ServerConn, channels <-chan ssh.NewChannel
 			for req := range in {
 				log.Printf("request type made by client: %s\n", req.Type)
 				switch req.Type {
-				case "exec":
+				case "exec": // Execute a command
 					payload := bytes.TrimPrefix(req.Payload, []byte{0, 0, 0, 6}) // 0 0 0 6 is the length of "exec"
 					channel.Write([]byte(ExecCommand(connection, payload)))
 					channel.SendRequest("exit-status", false, []byte{0, 0, 0, 0}) // 0 is the exit status (success)
 					req.Reply(true, nil)
 					channel.Close()
-				case "shell":
+				case "shell": // Start an interactive shell
 					req.Reply(req.Type == "shell", nil)
-				case "pty-req":
+				case "pty-req": // Request a pseudo terminal
 					CreateTerminal(connection, channel)
 					req.Reply(true, nil)
 				default:
