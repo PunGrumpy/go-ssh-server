@@ -1,7 +1,14 @@
 <div align="center">
     <h1><code>🐰</code> SSH Server</h1>
     <strong>SSH Server</strong> is a simple SSH server written in Go.
+    <div>
+        <img src="./.github/images/Draugr.gif" width="256" />
+    </div>
 </div>
+
+## `📸` Screenshots
+
+![Screenshot](.github/images/screenshot.png)
 
 ## `📝` About
 
