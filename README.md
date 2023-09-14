@@ -73,6 +73,17 @@ docker compose build # docker-compose build
 docker compose up -d # docker-compose up -d
 ```
 
+## `📃` Available Commands
+
+- `help` - Show help
+- `exit` - Exit shell
+- `whoami` - Show current user _still not working_
+- `ls` - List files
+- `pwd` - Show current directory
+- `cat` - Show file content
+- `echo` - Print text
+- `clear` - Clear screen
+
 ## `📚` References
 
 - [gliderlabs/ssh](https://pkg.go.dev/github.com/gliderlabs/ssh?utm_source=godoc) _Learned a lot from this project_
