@@ -5,11 +5,39 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"strings"
 
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/term"
 )
+
+func ParseAuthorizedKey(authorizedKey []byte) (map[string]bool, error) {
+	authorizedKeysMap := map[string]bool{}
+	for len(authorizedKey) > 0 {
+		publicKey, _, _, rest, err := ssh.ParseAuthorizedKey(authorizedKey)
+		if err != nil {
+			return nil, errors.New("unable to parse authorized key: " + err.Error())
+		}
+
+		authorizedKeysMap[string(publicKey.Marshal())] = true
+		authorizedKey = rest
+	}
+	return authorizedKeysMap, nil
+}
+
+func PublicKeyCallback(context ssh.ConnMetadata, publicKey ssh.PublicKey, authorizedKeysMap map[string]bool) (*ssh.Permissions, error) {
+	if authorizedKeysMap[string(publicKey.Marshal())] {
+		return &ssh.Permissions{
+			Extensions: map[string]string{
+				"pubkey-fp": ssh.FingerprintSHA256(publicKey),
+			},
+		}, nil
+	}
+
+	return nil, errors.New("unknown public key for " + context.User())
+}
 
 func StartServer(privateKey []byte, authorizedKey []byte) error {
 	authorizedKeysMap, err := ParseAuthorizedKey(authorizedKey)
@@ -61,32 +89,6 @@ func StartServer(privateKey []byte, authorizedKey []byte) error {
 	}
 }
 
-func ParseAuthorizedKey(authorizedKey []byte) (map[string]bool, error) {
-	authorizedKeysMap := map[string]bool{}
-	for len(authorizedKey) > 0 {
-		publicKey, _, _, rest, err := ssh.ParseAuthorizedKey(authorizedKey)
-		if err != nil {
-			return nil, errors.New("unable to parse authorized key: " + err.Error())
-		}
-
-		authorizedKeysMap[string(publicKey.Marshal())] = true
-		authorizedKey = rest
-	}
-	return authorizedKeysMap, nil
-}
-
-func PublicKeyCallback(context ssh.ConnMetadata, publicKey ssh.PublicKey, authorizedKeysMap map[string]bool) (*ssh.Permissions, error) {
-	if authorizedKeysMap[string(publicKey.Marshal())] {
-		return &ssh.Permissions{
-			Extensions: map[string]string{
-				"pubkey-fp": ssh.FingerprintSHA256(publicKey),
-			},
-		}, nil
-	}
-
-	return nil, errors.New("unknown public key for " + context.User())
-}
-
 func HandleConnection(connection *ssh.ServerConn, channels <-chan ssh.NewChannel) {
 	for newChannel := range channels {
 		if newChannel.ChannelType() != "session" {
@@ -100,28 +102,66 @@ func HandleConnection(connection *ssh.ServerConn, channels <-chan ssh.NewChannel
 			continue
 		}
 
-		go func(in <-chan *ssh.Request) {
-			for req := range in {
-				log.Printf("request type made by client: %s\n", req.Type)
-				switch req.Type {
-				case "exec": // Execute a command
-					payload := string(req.Payload[4:]) // Make sure to remove the length of the payload
-					output := ExecCommand(connection, []byte(payload))
-					channel.Write([]byte(output))
-					exitStatus := []byte{0, 0, 0, 0}
-					channel.SendRequest("exit-status", false, exitStatus)
-					req.Reply(true, nil)
-					channel.Close()
-				case "shell": // Start an interactive shell
-					req.Reply(req.Type == "shell", nil)
-				case "pty-req": // Request a pseudo terminal
-					CreateTerminal(connection, channel)
-					req.Reply(true, nil)
-				default:
-					req.Reply(false, nil)
-				}
+		go HandleSession(channel, requests)
+	}
+}
+
+func HandleSession(channel ssh.Channel, requests <-chan *ssh.Request) {
+	defer channel.Close()
+
+	for req := range requests {
+		log.Printf("request type made by client: %s\n", req.Type)
+		switch req.Type {
+		case "exec": // Execute a command
+			payload := string(req.Payload[4:]) // Make sure to remove the length of the payload
+			output := ExecCommand(nil, []byte(payload))
+			channel.Write([]byte(output))
+			exitStatus := []byte{0, 0, 0, 0}
+			channel.SendRequest("exit-status", false, exitStatus)
+			req.Reply(true, nil)
+			channel.Close()
+		case "shell": // Start an interactive shell
+			req.Reply(req.Type == "shell", nil)
+		case "pty-req": // Request a pseudo terminal
+			CreateTerminal(nil, channel)
+			req.Reply(true, nil)
+		case "env": // Set environment variables
+			req.Reply(true, nil)
+		case "subsystem": // Start a subsystem
+			subsystem := string(req.Payload[4:])
+			switch subsystem {
+			case "sftp":
+				HandleDataTransfer(channel, req, "SFTP")
+			case "scp":
+				HandleDataTransfer(channel, req, "SCP")
+			default:
+				req.Reply(false, nil)
 			}
-		}(requests)
+		default:
+			req.Reply(false, nil)
+		}
+	}
+
+}
+
+func HandleDataTransfer(channel ssh.Channel, req *ssh.Request, name string) {
+	log.Printf("Starting %s server...\n", name)
+	req.Reply(true, nil)
+
+	serverOptions := []sftp.ServerOption{
+		sftp.WithDebug(os.Stdout),
+	}
+
+	server, err := sftp.NewServer(
+		channel,
+		serverOptions...,
+	)
+	if err != nil {
+		log.Fatalf("unable to start %s server: %v", name, err)
+	}
+
+	if err := server.Serve(); err != nil {
+		log.Fatalf("unable to start %s server: %v", name, err)
 	}
 }
 
@@ -130,7 +170,15 @@ func ExecCommand(connection *ssh.ServerConn, payload []byte) string {
 	case "whoami":
 		return fmt.Sprintf("You are %s\n", connection.User())
 	case "ls":
-		return "I don't know how to list files yet\n"
+		files, err := os.ReadDir(".")
+		if err != nil {
+			log.Fatalf("unable to read directory: %v", err)
+		}
+		var fileNames []string
+		for _, file := range files {
+			fileNames = append(fileNames, file.Name())
+		}
+		return strings.Join(fileNames, "\n") + "\n"
 	case "echo":
 		return "Enter text to echo: "
 	case "clear":
@@ -164,7 +212,13 @@ func CreateTerminal(connection *ssh.ServerConn, channel ssh.Channel) {
 			case "whoami":
 				terminalInstance.Write([]byte("You are " + connection.User() + "\n"))
 			case "ls":
-				terminalInstance.Write([]byte("I don't know how to list files yet\n"))
+				files, err := os.ReadDir(".")
+				if err != nil {
+					log.Fatalf("unable to read directory: %v", err)
+				}
+				for _, file := range files {
+					terminalInstance.Write([]byte(file.Name() + "\n"))
+				}
 			case "echo":
 				terminalInstance.Write([]byte("Enter text to echo: "))
 				text, err := terminalInstance.ReadLine()
