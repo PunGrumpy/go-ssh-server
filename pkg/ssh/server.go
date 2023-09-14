@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/PunGrumpy/go-ssh/pkg/ssh/commands"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/term"
@@ -37,6 +38,16 @@ func PublicKeyCallback(context ssh.ConnMetadata, publicKey ssh.PublicKey, author
 	}
 
 	return nil, errors.New("unknown public key for " + context.User())
+}
+
+func ParseCommandArgs(payload string) (string, string) {
+	parts := strings.SplitN(payload, " ", 2)
+	command := parts[0]
+	var args string
+	if len(parts) > 1 {
+		args = parts[1]
+	}
+	return command, args
 }
 
 func StartServer(privateKey []byte, authorizedKey []byte) error {
@@ -114,7 +125,7 @@ func HandleSession(channel ssh.Channel, requests <-chan *ssh.Request) {
 		switch req.Type {
 		case "exec": // Execute a command
 			payload := string(req.Payload[4:]) // Make sure to remove the length of the payload
-			output := ExecCommand(nil, []byte(payload))
+			output := ExecCommand([]byte(payload))
 			channel.Write([]byte(output))
 			exitStatus := []byte{0, 0, 0, 0}
 			channel.SendRequest("exit-status", false, exitStatus)
@@ -141,7 +152,6 @@ func HandleSession(channel ssh.Channel, requests <-chan *ssh.Request) {
 			req.Reply(false, nil)
 		}
 	}
-
 }
 
 func HandleDataTransfer(channel ssh.Channel, req *ssh.Request, name string) {
@@ -165,31 +175,18 @@ func HandleDataTransfer(channel ssh.Channel, req *ssh.Request, name string) {
 	}
 }
 
-func ExecCommand(connection *ssh.ServerConn, payload []byte) string {
-	switch string(payload) {
-	case "whoami":
-		return fmt.Sprintf("You are %s\n", connection.User())
-	case "ls":
-		files, err := os.ReadDir(".")
-		if err != nil {
-			log.Fatalf("unable to read directory: %v", err)
-		}
-		var fileNames []string
-		for _, file := range files {
-			fileNames = append(fileNames, file.Name())
-		}
-		return strings.Join(fileNames, "\n") + "\n"
-	case "echo":
-		return "Enter text to echo: "
-	case "clear":
-		return "\033[H\033[2J"
-	case "exit":
-		return "Bye\n"
-	case "help":
-		return GetAvailableCommands()
-	default:
-		return fmt.Sprintf("Unknown command: %s\n", string(payload))
+func ExecCommand(payload []byte) string {
+	command, args := ParseCommandArgs(string(payload))
+	handler, ok := commands.CommandHandlers[command]
+	if !ok {
+		return "Unknown command\n"
 	}
+
+	result, err := handler(nil, []byte(args))
+	if err != nil {
+		return err.Error()
+	}
+	return result
 }
 
 func CreateTerminal(connection *ssh.ServerConn, channel ssh.Channel) {
@@ -197,9 +194,15 @@ func CreateTerminal(connection *ssh.ServerConn, channel ssh.Channel) {
 
 	go func() {
 		defer channel.Close()
-		terminalInstance.Write([]byte("Welcome to the SSH server\n"))
-		terminalInstance.Write([]byte("Type 'exit' to close the connection\n"))
-		terminalInstance.Write([]byte("Type 'help' to see all available commands\n"))
+		if connection == nil {
+			terminalInstance.Write([]byte("Welcome to the SSH server\n"))
+			terminalInstance.Write([]byte("Type 'exit' to close the connection\n"))
+			terminalInstance.Write([]byte("Type 'help' to see all available commands\n"))
+		} else {
+			terminalInstance.Write([]byte("Welcome, " + connection.Conn.User() + "\n"))
+			terminalInstance.Write([]byte("Type 'exit' to close the connection\n"))
+			terminalInstance.Write([]byte("Type 'help' to see all available commands\n"))
+		}
 
 		for {
 			line, err := terminalInstance.ReadLine()
@@ -208,41 +211,19 @@ func CreateTerminal(connection *ssh.ServerConn, channel ssh.Channel) {
 				return
 			}
 
-			switch line {
-			case "whoami":
-				terminalInstance.Write([]byte("You are " + connection.User() + "\n"))
-			case "ls":
-				files, err := os.ReadDir(".")
-				if err != nil {
-					log.Fatalf("unable to read directory: %v", err)
-				}
-				for _, file := range files {
-					terminalInstance.Write([]byte(file.Name() + "\n"))
-				}
-			case "echo":
-				terminalInstance.Write([]byte("Enter text to echo: "))
-				text, err := terminalInstance.ReadLine()
-				if err != nil {
-					fmt.Printf("unable to read line: %v", err)
-					return
-				}
-				terminalInstance.Write([]byte("You echoed: " + text + "\n"))
-			case "clear":
-				terminalInstance.Write([]byte("\033[H\033[2J"))
-			case "help":
-				terminalInstance.Write([]byte(GetAvailableCommands()))
-			case "exit":
-				terminalInstance.Write([]byte("Bye\n"))
-				return
-			default:
+			command, args := ParseCommandArgs(line)
+			handler, ok := commands.CommandHandlers[command]
+			if !ok {
 				terminalInstance.Write([]byte("Unknown command\n"))
+				continue
 			}
+
+			result, err := handler(connection, []byte(args))
+			if err != nil {
+				terminalInstance.Write([]byte(err.Error()))
+				continue
+			}
+			terminalInstance.Write([]byte(result))
 		}
 	}()
-}
-
-func GetAvailableCommands() string {
-	commands := []string{"whoami", "echo", "clear", "exit", "help"}
-	commandList := "Available commands:\n" + strings.Join(commands, "\n") + "\n"
-	return commandList
 }

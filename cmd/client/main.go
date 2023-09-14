@@ -56,10 +56,10 @@ func main() {
 
 	defer session.Close()
 
-	output, err := session.Output("whoami")
+	output, err := session.Output("pwd")
 	if err != nil {
 		log.Fatalf("session output error: %s", err.Error())
 	}
 
-	log.Printf("Output from remote host: %s", string(output))
+	log.Printf("\nOutput from remote host › %s", string(output))
 }
