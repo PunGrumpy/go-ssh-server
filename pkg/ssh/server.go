@@ -103,7 +103,9 @@ func StartServer(privateKey []byte, authorizedKey []byte) error {
 func HandleConnection(connection *ssh.ServerConn, channels <-chan ssh.NewChannel) {
 	for newChannel := range channels {
 		if newChannel.ChannelType() != "session" {
-			newChannel.Reject(ssh.UnknownChannelType, "unknown channel type")
+			if err := newChannel.Reject(ssh.UnknownChannelType, "unknown channel type"); err != nil {
+				log.Fatalf("unable to reject channel: %v", err)
+			}
 			continue
 		}
 
@@ -126,18 +128,30 @@ func HandleSession(channel ssh.Channel, requests <-chan *ssh.Request) {
 		case "exec": // Execute a command
 			payload := string(req.Payload[4:]) // Make sure to remove the length of the payload
 			output := ExecCommand([]byte(payload))
-			channel.Write([]byte(output))
+			if _, err := channel.Write([]byte(output)); err != nil {
+				log.Fatalf("could not write output: %v", err)
+			}
 			exitStatus := []byte{0, 0, 0, 0}
-			channel.SendRequest("exit-status", false, exitStatus)
-			req.Reply(true, nil)
+			if _, err := channel.SendRequest("exit-status", false, exitStatus); err != nil {
+				log.Fatalf("could not send exit status: %v", err)
+			}
+			if err := req.Reply(true, nil); err != nil {
+				log.Fatalf("could not reply to request: %v", err)
+			}
 			channel.Close()
 		case "shell": // Start an interactive shell
-			req.Reply(req.Type == "shell", nil)
+			if err := req.Reply(req.Type == "shell", nil); err != nil {
+				log.Fatalf("could not reply to request: %v", err)
+			}
 		case "pty-req": // Request a pseudo terminal
 			CreateTerminal(nil, channel)
-			req.Reply(true, nil)
+			if err := req.Reply(true, nil); err != nil {
+				log.Fatalf("could not reply to request: %v", err)
+			}
 		case "env": // Set environment variables
-			req.Reply(true, nil)
+			if err := req.Reply(true, nil); err != nil {
+				log.Fatalf("could not reply to request: %v", err)
+			}
 		case "subsystem": // Start a subsystem
 			subsystem := string(req.Payload[4:])
 			switch subsystem {
@@ -146,17 +160,23 @@ func HandleSession(channel ssh.Channel, requests <-chan *ssh.Request) {
 			case "scp":
 				HandleDataTransfer(channel, req, "SCP")
 			default:
-				req.Reply(false, nil)
+				if err := req.Reply(false, nil); err != nil {
+					log.Fatalf("could not reply to request: %v", err)
+				}
 			}
 		default:
-			req.Reply(false, nil)
+			if err := req.Reply(false, nil); err != nil {
+				log.Fatalf("could not reply to request: %v", err)
+			}
 		}
 	}
 }
 
 func HandleDataTransfer(channel ssh.Channel, req *ssh.Request, name string) {
 	log.Printf("Starting %s server...\n", name)
-	req.Reply(true, nil)
+	if err := req.Reply(true, nil); err != nil {
+		log.Fatalf("could not reply to request: %v", err)
+	}
 
 	serverOptions := []sftp.ServerOption{
 		sftp.WithDebug(os.Stdout),
@@ -194,14 +214,14 @@ func CreateTerminal(connection *ssh.ServerConn, channel ssh.Channel) {
 
 	go func() {
 		defer channel.Close()
-		if connection == nil {
-			terminalInstance.Write([]byte("Welcome to the SSH server\n"))
-			terminalInstance.Write([]byte("Type 'exit' to close the connection\n"))
-			terminalInstance.Write([]byte("Type 'help' to see all available commands\n"))
-		} else {
-			terminalInstance.Write([]byte("Welcome, " + connection.Conn.User() + "\n"))
-			terminalInstance.Write([]byte("Type 'exit' to close the connection\n"))
-			terminalInstance.Write([]byte("Type 'help' to see all available commands\n"))
+		if _, err := terminalInstance.Write([]byte("Welcome to the SSH server\n")); err != nil {
+			log.Fatalf("unable to write to terminal: %v", err)
+		}
+		if _, err := terminalInstance.Write([]byte("Type 'exit' to close the connection\n")); err != nil {
+			log.Fatalf("unable to write to terminal: %v", err)
+		}
+		if _, err := terminalInstance.Write([]byte("Type 'help' to see all available commands\n")); err != nil {
+			log.Fatalf("unable to write to terminal: %v", err)
 		}
 
 		for {
@@ -214,16 +234,22 @@ func CreateTerminal(connection *ssh.ServerConn, channel ssh.Channel) {
 			command, args := ParseCommandArgs(line)
 			handler, ok := commands.CommandHandlers[command]
 			if !ok {
-				terminalInstance.Write([]byte("Unknown command\n"))
+				if _, err := terminalInstance.Write([]byte("Unknown command\n")); err != nil {
+					log.Fatalf("unable to write to terminal: %v", err)
+				}
 				continue
 			}
 
 			result, err := handler(connection, []byte(args))
 			if err != nil {
-				terminalInstance.Write([]byte(err.Error()))
+				if _, err := terminalInstance.Write([]byte(err.Error())); err != nil {
+					log.Fatalf("unable to write to terminal: %v", err)
+				}
 				continue
 			}
-			terminalInstance.Write([]byte(result))
+			if _, err := terminalInstance.Write([]byte(result)); err != nil {
+				log.Fatalf("unable to write to terminal: %v", err)
+			}
 		}
 	}()
 }
