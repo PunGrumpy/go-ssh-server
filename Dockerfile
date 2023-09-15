@@ -17,7 +17,8 @@ WORKDIR /app
 COPY --from=build /app/server /app/server
 COPY --from=build /app/server_key.pem /app/server_key.pem
 COPY --from=build /app/server_key.pub /app/server_key.pub
-RUN apt-get update && apt-get install -y openssh-server && \
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+RUN apt-get update && apt-get install --no-install-recommends -y openssh-server=9.4 && \
     mkdir /var/run/sshd && \
     echo 'root:root' | chpasswd && \
     sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
